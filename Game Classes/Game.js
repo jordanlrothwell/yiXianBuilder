@@ -1,18 +1,26 @@
 const Card = require("./Card");
 const Player = require("./Player");
 
+/* 
+  The main game object responsible for holding players, 
+  cards, and carrying out the game loop until win or loss
+*/
 class GameObject {
   constructor(player1, player2) {
+    // Set players from arguments
     this.player1 = player1;
     this.player2 = player2;
 
+    // Current player + opponent to be swapped on each new turn
     this.currentPlayer = this.currentPlayer;
     this.opponent = this.opponent;
 
+    // Turn counter to limit infinite loops where no player wins (among other uses)
+    // Begins at 0 so DetermineOrder() knows the game hasn't started yet
     this.turn = 0;
   }
 
-  // Main game loop
+  // Main game loop (UNDER CONSTRUCTION)
   GameLoop() {
     this.DetermineOrder();
     this.StartTurn();
@@ -20,7 +28,9 @@ class GameObject {
 
   // Check cultivation before first turn and set player order
   DetermineOrder() {
+    // Check if game has begun ...
     if (this.turn === 0) {
+      // ...and assign current player to highest cultivation
       if (this.player1.cultivation > this.player2.cultivation) {
         this.currentPlayer = this.player1;
         this.opponent = this.player2;
@@ -28,7 +38,9 @@ class GameObject {
         this.currentPlayer = this.player2;
         this.opponent = this.player1;
       }
-      this.turn = this.turn + 1;
+
+      // Game begins on turn 1
+      this.turn += 1;
     }
   }
 
@@ -36,6 +48,7 @@ class GameObject {
   StartTurn() {
     // Update defence at start of turn
     this.UpdateDefenceSOT();
+
     // Apply any SOT statuses
     this.ApplyStatusesSOT();
   }
@@ -44,19 +57,24 @@ class GameObject {
   UpdateDefenceSOT() {
     // Check for maintain defence stacks
     if (this.currentPlayer.defence.maintain > 0) {
-      this.currentPlayer.defence.maintain =
-        this.currentPlayer.defence.maintain - 1;
+      this.currentPlayer.defence.maintain -= 1;
       return;
     }
 
     // Reduce current player DEF by reduction factor
     this.DefenceReductionInstance(
       this.currentPlayer,
-      this.currentPlayer.defence.current * this.currentPlayer.defence.reduction
+      // Math.floor as game rounds down to nearest integer
+      Math.floor(
+        this.currentPlayer.defence.current *
+          this.currentPlayer.defence.reduction
+      )
     );
   }
 
   // Determine which player an effect should target
+  // Target is not always a function of whose turn it is even when
+  // mechanic is consistent (due to variety of card effects)
   DeterminePlayer(target) {
     if (target === "self") {
       return this.currentPlayer;
@@ -67,6 +85,7 @@ class GameObject {
 
   // Deal DMG instance against target's current DEF
   DefenceReductionInstance(target, instance) {
+    // TODO: Revisit this method following creation of 'DeterminePlayer()'
     // Determine which player is target and assign other player to nonTarget
     let nonTarget;
     if (target === this.currentPlayer) {
@@ -85,25 +104,23 @@ class GameObject {
 
       // if DEF > DMG, reduce DEF by DMG and continue
     } else {
-      target.defence.current = target.defence.current - instance;
+      target.defence.current -= instance;
     }
 
     // Increase target's defence.totalReduced
-    target.defence.totalReduced = target.defence.totalReduced + instance;
+    target.defence.totalReduced += instance;
 
     // Check for stacks of damageOnDefenceReduction
     if (target.status.damageOnDefenceReduction.count > 0) {
-      target.status.damageOnDefenceReduction.count =
-        target.status.damageOnDefenceReduction.count - 1;
+      target.status.damageOnDefenceReduction.count -= 1;
       this.DamageInstance(nonTarget, instance);
     }
 
     // Check for stacks of restoreDefenceOnReduction
     if (target.status.restoreDefenceOnReduction > 0) {
-      target.status.restoreDefenceOnReduction =
-        target.status.restoreDefenceOnReduction - 1;
-      target.defence.current = target.defence.current + instance;
-      target.defence.totalGained = target.defence.totalGained + instance;
+      target.status.restoreDefenceOnReduction -= 1;
+      target.defence.current += instance;
+      target.defence.totalGained += instance;
     }
   }
 
@@ -121,11 +138,11 @@ class GameObject {
   RemoveHPInstance(target, instance) {
     // Check for target guardUp stacks
     if (target.guardUp.current > 0) {
-      target.guardUp.current = target.guardUp.current - 1;
+      target.guardUp.current -= 1;
       return;
     }
-    target.health.current = target.health.current - instance;
-    target.health.totalReduced = target.health.totalReduced + instance;
+    target.health.current += -instance;
+    target.health.totalReduced += instance;
 
     // Check whether target current HP > 0
     if (target.health.current > 0) {
@@ -139,13 +156,20 @@ class GameObject {
   PreDeathChecks(target) {
     // Check for phoenix
     if (target.status.phoenix.count > 0) {
-      target.status.phoenix.count = target.status.phoenix.count - 1;
+      target.status.phoenix.count -= 1;
+
+      // TODO: Check 'value' variable below, doesn't look like it's connected to anything
+      // and I suspect I haven't caught this yet because I've not attempted to test it
       target.health.current = value;
-      target.health.maximum = target.health.maximum + value;
+      target.health.maximum += value;
     }
+
+    // Death() method to trigger end of game functions
     this.Death(target);
   }
 
+  // Death() method to trigger end of game functions
+  // TODO: Decide what EOG functions need to be carried out
   Death(target) {
     console.log(`${target} is dead. Game Over!`);
   }
@@ -155,30 +179,32 @@ class GameObject {
     console.log(
       `[Applying Statuses] Executing ${this.currentPlayer.SOTS.length} statuses...`
     );
-    // For each item in the currentPlayer.SOTS array
+
+    // For each item in the currentPlayer.SOTS array...
     for (let i = 0; i < this.currentPlayer.SOTS.length; i++) {
-      // Check if status is permanent and decrement charges if so
+      // ...check if status is permanent and decrement charges if so
       console.log(`[Applying Statuses] Executing Status ${i + 1}...`);
       if (!this.currentPlayer.SOTS[i].permanent) {
         console.log(`[Applying Statuses] Status ${i + 1} is permanent.`);
 
-        // Return if no charges remaining
+        // Return if no charges remaining...
         if (this.currentPlayer.SOTS[i].charges === 0) {
           console.log(`[Applying Statuses] Status ${i + 1} is out of charges!`);
           return;
 
-          // Else reduce charges and continue
+          // ...else reduce charges and continue
         } else {
           console.log(
             `[Applying Statuses] Status ${i + 1} reduced charges from ${
               this.currentPlayer.SOTS[i].charges
             } to ${this.currentPlayer.SOTS[i].charges - 1}.`
           );
-          this.currentPlayer.SOTS[i].charges =
-            this.currentPlayer.SOTS[i].charges - 1;
+          this.currentPlayer.SOTS[i].charges -= 1;
 
           // TODO: ADD EXECUTE STATUS FUNCTION HERE
         }
+
+        // TODO: WHY IS THIS RETURN HERE?
         return;
       }
 
@@ -190,20 +216,28 @@ class GameObject {
           } turns.`
         );
 
-        // Increment proc count
+        // For periodic statuses, increment proc count before checking for the proc itself
         console.log(
           `[Applying Statuses] Status ${i + 1} proc count increased from ${
             this.currentPlayer.SOTS[i].procs
           } to ${this.currentPlayer.SOTS[i].procs + 1}.`
         );
-        this.currentPlayer.SOTS[i].procs = this.currentPlayer.SOTS[i].procs + 1;
+        this.currentPlayer.SOTS[i].procs += 1;
 
-        // Check if status procs this turn
+        // Check if the periodic status procs this turn...
         if (
           this.currentPlayer.SOTS[i].procs ===
           this.currentPlayer.SOTS[i].frequency
         ) {
+          // ...and execute its effects if so
           this.ExecuteEffects(this.currentPlayer.SOTS[i].effects);
+
+          // Because we're checking for equality (rather than divisibility)
+          // we reset the proc counter back to 0 after each proc
+          this.currentPlayer.SOTS[i].procs = 0;
+
+          // If the periodic status didn't proc this turn we log no. of turns
+          // remaining until proc into console
         } else {
           console.log(
             `[Applying Statuses] Status ${i + 1} will proc in ${
@@ -219,29 +253,34 @@ class GameObject {
   // Execute all effects in a given array
   ExecuteEffects(effects) {
     console.log(`[Executing Effects] Executing ${effects.length} effects...`);
+
+    // Loop through all effects in the array and check for type,
+    // then trigger the effect associated with each method.
+    // See each effect's method for information about its object
+    // TODO: ADD THE INFORMATION REFERRED TO IN THE ABOVE LINE OF COMMENT (heh)
     for (let i = 0; i < effects.length; i++) {
-      // If effect is an Attack
+      // If effect is 'Attack' type
       if (effects[i].type === "ATK") {
         console.log(
           `[Executing Effects] Effect ${i + 1} is an 'Attack' effect.`
         );
         this.Attack(effects[i]);
 
-        // If effect is an Attribute Change
+        // If effect is 'Attribute Change' type
       } else if (effects[i].type === "ATTR") {
         console.log(
           `[Executing Effects] Effect ${i + 1} is an 'Attribute Change' effect.`
         );
         this.ChangeAttribute(effects[i]);
 
-        // If effect is an Add Status
+        // If effect is 'Add Status' type
       } else if (effects[i].type === "ADDSTAT") {
         console.log(
           `[Executing Effects] Effect ${i + 1} is an 'Add Status' effect.`
         );
         this.AddStatus(effects[i]);
 
-        // If effect is an is a Status
+        // If effect is 'Status' type
       } else if (effects[i].type === "STAT") {
         console.log(
           `[Executing Effects] Effect ${i + 1} is a 'Status' effect.`
@@ -261,24 +300,24 @@ class GameObject {
   // Calculate total damage for an ATK instance
   CalculateATKInstanceDamage(baseDamage) {
     // Add Increase Attack
-    baseDamage = baseDamage + this.currentPlayer.increaseAttack.current;
+    baseDamage += this.currentPlayer.increaseAttack.current;
     console.log(
       `[Effect: Attack] Increase Damage Stacks = ${this.currentPlayer.increaseAttack.current}. (TOTAL: ${baseDamage})`
     );
 
     // Subtract Decrease Attack
-    baseDamage = baseDamage - this.currentPlayer.decreaseAttack.current;
+    baseDamage += -this.currentPlayer.decreaseAttack.current;
     console.log(
       `[Effect: Attack] Decrease Damage Stacks = ${this.currentPlayer.decreaseAttack.current}. (TOTAL: ${baseDamage})`
     );
 
     // Add Sword Intent
-    baseDamage = baseDamage + this.currentPlayer.swordIntent.current;
+    baseDamage += this.currentPlayer.swordIntent.current;
     console.log(
       `[Effect: Attack] Sword Intent Stacks = ${this.currentPlayer.swordIntent.current}. (TOTAL: ${baseDamage})`
     );
 
-    // TODO: calculate special damage
+    // TODO: ADD SPECIAL DAMAGE METHOD
 
     // Subtract Weaken
     if (this.currentPlayer.weaken.current > 0) {
